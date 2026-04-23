@@ -1,0 +1,13 @@
+{
+  "name": "market-dashboard",
+  "version": "1.0.0",
+  "description": "A股/美股/黄金/数字货币行情看板",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "axios": "^1.7.0"
+  }
+}

@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>行情看板</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            font-family: 'Segoe UI', 'Arial', sans-serif;
+            color: #e0e0e0;
+            padding: 24px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .header h1 {
+            font-size: 2em;
+            font-weight: 600;
+            color: #e0e0e0;
+            letter-spacing: 0.05em;
+        }
+
+        .header .update-time {
+            font-size: 0.85em;
+            color: rgba(224, 224, 224, 0.5);
+            margin-top: 6px;
+        }
+
+        .markets {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 20px;
+        }
+
+        .market-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+        }
+
+        .market-card .card-title {
+            font-size: 0.9em;
+            color: rgba(224, 224, 224, 0.6);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            margin-bottom: 16px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .stock-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+        }
+
+        .stock-item + .stock-item {
+            border-top: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        .stock-name {
+            font-size: 0.95em;
+            font-weight: 500;
+            color: #e0e0e0;
+        }
+
+        .stock-right {
+            text-align: right;
+        }
+
+        .stock-price {
+            font-size: 1em;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .stock-change {
+            font-size: 0.8em;
+            margin-top: 2px;
+        }
+
+        .up { color: #e74c3c; }
+        .down { color: #2ecc71; }
+
+        @keyframes flashRed {
+            0%   { background-color: rgba(231, 76, 60, 0.45); }
+            60%  { background-color: rgba(231, 76, 60, 0.2); }
+            100% { background-color: transparent; }
+        }
+
+        @keyframes flashGreen {
+            0%   { background-color: rgba(46, 204, 113, 0.45); }
+            60%  { background-color: rgba(46, 204, 113, 0.2); }
+            100% { background-color: transparent; }
+        }
+
+        .flash-up {
+            animation: flashRed 1.2s ease-out forwards;
+            border-radius: 4px;
+            padding: 0 6px;
+        }
+
+        .flash-down {
+            animation: flashGreen 1.2s ease-out forwards;
+            border-radius: 4px;
+            padding: 0 6px;
+        }
+
+        .loading {
+            text-align: center;
+            color: rgba(224, 224, 224, 0.4);
+            font-size: 0.85em;
+            padding: 20px 0;
+        }
+
+        .error {
+            text-align: center;
+            color: #e67e22;
+            font-size: 0.85em;
+            padding: 10px 0;
+        }
+
+        @media (max-width: 600px) {
+            body { padding: 16px; }
+            .header h1 { font-size: 1.5em; }
+            .markets { gap: 14px; }
+            .market-card { padding: 16px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>行情看板</h1>
+        <div class="update-time" id="updateTime">加载中...</div>
+    </div>
+
+    <div class="markets">
+        <div class="market-card" id="ashares">
+            <div class="card-title">A 股</div>
+            <div class="loading">加载中...</div>
+        </div>
+        <div class="market-card" id="usstocks">
+            <div class="card-title">美 股</div>
+            <div class="loading">加载中...</div>
+        </div>
+        <div class="market-card" id="gold">
+            <div class="card-title">黄 金</div>
+            <div class="loading">加载中...</div>
+        </div>
+    </div>
+
+    <script>
+        const REFRESH_INTERVAL = 30000;
+        const previousData = {};
+
+        function formatPrice(price, decimals) {
+            if (price === undefined || price === null || isNaN(price)) return '--';
+            return price.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+        }
+
+        function formatChange(change, percent) {
+            if (change === undefined || change === null || isNaN(change)) return '--';
+            const sign = change >= 0 ? '+' : '';
+            return `${sign}${change.toFixed(2)}  (${sign}${percent.toFixed(2)}%)`;
+        }
+
+        function renderItems(containerId, items, priceDecimals) {
+            const container = document.getElementById(containerId);
+            const title = container.querySelector('.card-title');
+            if (!items || items.length === 0) {
+                container.innerHTML = '';
+                container.appendChild(title);
+                const div = document.createElement('div');
+                div.className = 'error';
+                div.textContent = '数据暂不可用';
+                container.appendChild(div);
+                return;
+            }
+            container.innerHTML = '';
+            container.appendChild(title);
+            for (const item of items) {
+                const key = item.code || item.name;
+                const prev = previousData[key];
+                const priceChanged = prev && item.price !== prev.price;
+                const isUp = item.change >= 0;
+                const cls = isUp ? 'up' : 'down';
+                const flashCls = priceChanged
+                    ? (item.price > prev.price ? 'flash-up' : 'flash-down')
+                    : '';
+                const div = document.createElement('div');
+                div.className = 'stock-item';
+                div.innerHTML = `
+                    <span class="stock-name">${item.name}</span>
+                    <div class="stock-right">
+                        <div class="stock-price ${cls} ${flashCls}">${formatPrice(item.price, priceDecimals)}</div>
+                        <div class="stock-change ${cls}">${formatChange(item.change, item.changePercent)}</div>
+                    </div>
+                `;
+                container.appendChild(div);
+                previousData[key] = { price: item.price };
+            }
+        }
+
+        async function fetchMarket(endpoint, containerId, priceDecimals) {
+            try {
+                const res = await fetch(`/api/${endpoint}`);
+                const data = await res.json();
+                if (data.error) {
+                    const container = document.getElementById(containerId);
+                    const title = container.querySelector('.card-title');
+                    container.innerHTML = '';
+                    container.appendChild(title);
+                    const div = document.createElement('div');
+                    div.className = 'error';
+                    div.textContent = data.error;
+                    container.appendChild(div);
+                    return;
+                }
+                renderItems(containerId, data, priceDecimals);
+            } catch (e) {
+                const container = document.getElementById(containerId);
+                const title = container.querySelector('.card-title');
+                container.innerHTML = '';
+                container.appendChild(title);
+                const div = document.createElement('div');
+                div.className = 'error';
+                div.textContent = '网络错误';
+                container.appendChild(div);
+            }
+        }
+
+        async function refreshAll() {
+            await Promise.all([
+                fetchMarket('ashares', 'ashares', 2),
+                fetchMarket('usstocks', 'usstocks', 2),
+                fetchMarket('gold', 'gold', 2)
+            ]);
+            const now = new Date();
+            document.getElementById('updateTime').textContent =
+                `最后更新: ${now.toLocaleTimeString('zh-CN')}`;
+        }
+
+        refreshAll();
+        setInterval(refreshAll, REFRESH_INTERVAL);
+    </script>
+</body>
+</html>
