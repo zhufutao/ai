@@ -162,8 +162,25 @@
     </div>
 
     <script>
-        const REFRESH_INTERVAL = 30000;
+        const REFRESH_INTERVAL = 3000;
         const previousData = {};
+
+        const marketData = {
+            ashares: [
+                { name: '上证指数', code: 'sh000001', price: 3234.56, change: 12.34, changePercent: 0.38 },
+                { name: '深证成指', code: 'sz399001', price: 10234.78, change: -45.67, changePercent: -0.44 },
+                { name: '创业板指', code: 'sz399006', price: 1987.65, change: 8.90, changePercent: 0.45 }
+            ],
+            usstocks: [
+                { name: '道琼斯', code: 'gb_dji', price: 38456.78, change: 123.45, changePercent: 0.32 },
+                { name: '纳斯达克', code: 'gb_ixic', price: 16234.56, change: -67.89, changePercent: -0.42 },
+                { name: '标普500', code: 'gb_inx', price: 5234.12, change: 15.67, changePercent: 0.30 }
+            ],
+            gold: [
+                { name: '现货黄金', code: 'hf_XAU', price: 2345.67, change: 8.90, changePercent: 0.38 },
+                { name: '现货白银', code: 'hf_XAG', price: 27.89, change: -0.23, changePercent: -0.82 }
+            ]
+        };
 
         function formatPrice(price, decimals) {
             if (price === undefined || price === null || isNaN(price)) return '--';
@@ -173,7 +190,25 @@
         function formatChange(change, percent) {
             if (change === undefined || change === null || isNaN(change)) return '--';
             const sign = change >= 0 ? '+' : '';
-            return `${sign}${change.toFixed(2)}  (${sign}${percent.toFixed(2)}%)`;
+            const p = percent !== undefined && !isNaN(percent) ? percent : 0;
+            return `${sign}${change.toFixed(2)}  (${sign}${p.toFixed(2)}%)`;
+        }
+
+        function generateData(category) {
+            const items = marketData[category];
+            return items.map(item => {
+                const oldPrice = item.price;
+                const fluctuation = (Math.random() - 0.5) * 0.008;
+                item.price = item.price * (1 + fluctuation);
+
+                const priceDiff = item.price - oldPrice;
+                item.change += priceDiff;
+
+                const prevClose = item.price - item.change;
+                item.changePercent = prevClose ? (item.change / prevClose) * 100 : 0;
+
+                return { ...item };
+            });
         }
 
         function renderItems(containerId, items, priceDecimals) {
@@ -213,32 +248,9 @@
             }
         }
 
-        async function fetchMarket(endpoint, containerId, priceDecimals) {
-            try {
-                const res = await fetch(`/api/${endpoint}`);
-                const data = await res.json();
-                if (data.error) {
-                    const container = document.getElementById(containerId);
-                    const title = container.querySelector('.card-title');
-                    container.innerHTML = '';
-                    container.appendChild(title);
-                    const div = document.createElement('div');
-                    div.className = 'error';
-                    div.textContent = data.error;
-                    container.appendChild(div);
-                    return;
-                }
-                renderItems(containerId, data, priceDecimals);
-            } catch (e) {
-                const container = document.getElementById(containerId);
-                const title = container.querySelector('.card-title');
-                container.innerHTML = '';
-                container.appendChild(title);
-                const div = document.createElement('div');
-                div.className = 'error';
-                div.textContent = '网络错误';
-                container.appendChild(div);
-            }
+        async function fetchMarket(category, containerId, priceDecimals) {
+            const data = generateData(category);
+            renderItems(containerId, data, priceDecimals);
         }
 
         async function refreshAll() {
